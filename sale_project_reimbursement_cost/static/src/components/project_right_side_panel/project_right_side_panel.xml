@@ -13,7 +13,7 @@
             <ProjectRightSidePanelSection
                 name="'provisions'"
                 show="state.data.provision_items?.data?.length &gt; 0"
-                dataClassName="'py-3'"
+                dataClassName="{'py-3': true}"
             >
                 <t t-set-slot="title">
                     Provisions

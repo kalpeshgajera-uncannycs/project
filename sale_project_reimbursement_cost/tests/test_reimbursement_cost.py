@@ -3,6 +3,7 @@
 
 from odoo.tests import new_test_user, tagged
 from odoo.tests.common import users
+from odoo.tools import convert_file
 
 from odoo.addons.account.tests.common import AccountTestInvoicingCommon
 from odoo.addons.base.tests.common import DISABLED_MAIL_CONTEXT
@@ -25,30 +26,44 @@ class TestReimbursementCost(AccountTestInvoicingCommon):
             ",project.group_project_user"
             ",analytic.group_analytic_accounting",
         )
+        convert_file(
+            cls.env,
+            "sale_project_reimbursement_cost",
+            "demo/product_demo.xml",
+            {},
+            mode="init",
+            noupdate=True,
+        )
         cls.service_task = cls.env.ref(
             "sale_project_reimbursement_cost.product_service_task"
         )
         cls.service_provision = cls.env.ref(
             "sale_project_reimbursement_cost.product_provision"
         )
+        cls.service_provision.write(
+            {
+                "service_policy": "ordered_prepaid",
+            }
+        )
         cls.service_reimbursement = cls.env.ref(
             "sale_project_reimbursement_cost.product_reimbursement"
         )
-        cls.sale_order = cls.SaleOrder.create(
+        cls.sale_order = cls.SaleOrder.sudo().create(
             {
                 "partner_id": cls.partner_a.id,
                 "partner_invoice_id": cls.partner_a.id,
                 "partner_shipping_id": cls.partner_a.id,
+                "user_id": cls.user.id,
             }
         )
-        cls.sol_task = cls.SaleLine.create(
+        cls.sol_task = cls.SaleLine.sudo().create(
             {
                 "product_id": cls.service_task.id,
                 "product_uom_qty": 1,
                 "order_id": cls.sale_order.id,
             }
         )
-        cls.sol_provision = cls.SaleLine.create(
+        cls.sol_provision = cls.SaleLine.sudo().create(
             {
                 "product_id": cls.service_provision.id,
                 "product_uom_qty": 1,
@@ -88,11 +103,14 @@ class TestReimbursementCost(AccountTestInvoicingCommon):
 
         # generate the project/task and provision
         self.sale_order.action_confirm()
+        project = self.sol_task.sudo().task_id.project_id.with_env(self.env)
+        self.sol_provision.write(
+            {"analytic_distribution": {str(project.account_id.id): 100}}
+        )
         customer_invoice = self.sale_order._create_invoices()
         customer_invoice.action_post()
         self.assertTrue(self.sol_task.task_id)
         self.assertTrue(self.sale_order.order_line.distribution_analytic_account_ids)
-        project = self.sol_task.task_id.project_id
         provision_items, reimbursement_items = _get_provision_and_reimbursement(project)
         self.assertEqual(len(reimbursement_items), 0)
         self.assertEqual(len(provision_items), 1)
@@ -100,12 +118,12 @@ class TestReimbursementCost(AccountTestInvoicingCommon):
         # generate the reimbursement
         self.bill_1.invoice_line_ids.write(
             {
-                "analytic_distribution": {project.account_id.id: 100},
+                "analytic_distribution": {str(project.account_id.id): 100},
                 "price_unit": 400,
                 "quantity": 1,
             }
         )
-        self.bill_1.action_post()
+        self.bill_1.sudo().action_post()
         # Check that the new lines are added to the sale order
         # 1 line for reimbursement and 1 line for provision
         self.assertEqual(len(self.sale_order.order_line), 4)
@@ -137,12 +155,12 @@ class TestReimbursementCost(AccountTestInvoicingCommon):
         new_bill.invoice_date = "2024-01-01"
         new_bill.invoice_line_ids.write(
             {
-                "analytic_distribution": {project.account_id.id: 100},
+                "analytic_distribution": {str(project.account_id.id): 100},
                 "price_unit": 600,
                 "quantity": 1,
             }
         )
-        new_bill.action_post()
+        new_bill.sudo().action_post()
         # Check that the new lines are added to the sale order
         # 1 line for reimbursement and 1 line for provision
         self.assertEqual(len(self.sale_order.order_line), 6)
@@ -185,12 +203,12 @@ class TestReimbursementCost(AccountTestInvoicingCommon):
         new_bill.invoice_date = "2024-01-01"
         new_bill.invoice_line_ids.write(
             {
-                "analytic_distribution": {project.account_id.id: 100},
+                "analytic_distribution": {str(project.account_id.id): 100},
                 "price_unit": 100,
                 "quantity": 1,
             }
         )
-        new_bill.action_post()
+        new_bill.sudo().action_post()
         # Check that the new lines are added to the sale order
         # 1 line for reimbursement and no line for provision
         self.assertEqual(len(self.sale_order.order_line), 7)
@@ -232,3 +250,30 @@ class TestReimbursementCost(AccountTestInvoicingCommon):
         self.assertEqual(reimbursement_1["amount"], -400)
         self.assertEqual(reimbursement_2["amount"], -600)
         self.assertIn("Provision", reimbursement_1["name"])
+
+    def test_reimbursement_cost_no_project_user(self):
+        """
+        Check that get_panel_data doesn't return provision_items
+        when the user doesn't have project.group_project_user.
+        """
+        self.sale_order.action_confirm()
+        project = self.sol_task.task_id.project_id
+        non_project_user = new_test_user(
+            self.env,
+            login="non-project-user",
+            groups="sales_team.group_sale_salesman",
+        )
+        res = project.with_user(non_project_user).get_panel_data()
+        self.assertEqual(res["provision_items"]["data"], [])
+
+    def test_reimbursement_cost_no_provision_data(self):
+        self.sale_order.action_confirm()
+        project = self.sol_task.task_id.project_id
+        self.bill_1.invoice_line_ids.write(
+            {
+                "analytic_distribution": {str(project.account_id.id): 100},
+                "price_unit": 400,
+            }
+        )
+        self.bill_1.sudo().action_post()
+        self.assertEqual(len(self.sale_order.order_line), 3)

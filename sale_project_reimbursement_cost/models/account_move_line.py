@@ -22,17 +22,17 @@ class AccountMoveLine(models.Model):
                 distribution_analytic_account_ids = (
                     sale_line.distribution_analytic_account_ids
                 )
-                provision_data = AnalyticLine.read_group(
+                provision_data = AnalyticLine._read_group(
                     [
                         ("account_id", "in", distribution_analytic_account_ids.ids),
                         ("product_id", "=", provision_product.id),
                     ],
-                    fields=["product_id", "amount:sum"],
                     groupby=["product_id"],
+                    aggregates=["amount:sum"],
                 )
                 if not provision_data:
                     continue
-                sale_reimbursement_data = SaleLine.read_group(
+                sale_reimbursement_data = SaleLine._read_group(
                     [
                         (
                             "distribution_analytic_account_ids",
@@ -43,17 +43,13 @@ class AccountMoveLine(models.Model):
                         ("id", "!=", sale_line.id),
                         ("is_expense", "=", True),
                     ],
-                    fields=["product_id", "untaxed_amount_to_invoice:sum"],
                     groupby=["product_id"],
+                    aggregates=["untaxed_amount_to_invoice:sum"],
                 )
                 reimbursement_amount = (
-                    sale_reimbursement_data[0]["untaxed_amount_to_invoice"]
-                    if sale_reimbursement_data
-                    else 0.0
+                    sale_reimbursement_data[0][1] if sale_reimbursement_data else 0.0
                 )
-                amount_remainig = max(
-                    provision_data[0]["amount"] - reimbursement_amount, 0
-                )
+                amount_remainig = max(provision_data[0][1] - reimbursement_amount, 0)
                 amount = min(amount_remainig, line.price_subtotal)
                 if (
                     float_compare(
