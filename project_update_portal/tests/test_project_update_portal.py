@@ -279,7 +279,7 @@ class TestProjectUpdatePortal(TestProjectCommon):
         # Compute access_url
         self.project_update_1._compute_access_url()
         expected_url = (
-            f"/my/projects/{self.project_pigs.id}" f"/update/{self.project_update_1.id}"
+            f"/my/projects/{self.project_pigs.id}/update/{self.project_update_1.id}"
         )
         self.assertEqual(self.project_update_1.access_url, expected_url)
 
@@ -382,8 +382,6 @@ class TestProjectUpdatePortalRoutes(TestProjectPortalCommon, HttpCaseWithUserPor
             }
         )
         self.authenticate("portal", "portal")
-        url = (
-            f"{self.base_projects_url}/{other_project.id}" f"/update/{other_update.id}"
-        )
+        url = f"{self.base_projects_url}/{other_project.id}/update/{other_update.id}"
         response = self.url_open(url)
         self.assertEqual(response.url, self.base_my_url)
