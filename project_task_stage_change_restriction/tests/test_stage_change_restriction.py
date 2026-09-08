@@ -34,7 +34,7 @@ class TestStageChangeRestriction(BaseCommon):
                     {
                         "name": login.replace("_", " ").title(),
                         "login": login,
-                        "groups_id": [(4, g.id) for g in groups],
+                        "group_ids": [(4, g.id) for g in groups],
                     }
                 )
             )
@@ -185,7 +185,8 @@ class TestStageChangeRestriction(BaseCommon):
             )
 
     def test_move_free(self):
-        task = self._clone_task(self.user_dev)
+        # Pass stage to cover 'if stage:' branch in _clone_task helper
+        task = self._clone_task(self.user_dev, stage=self.stage_free)
         for u in (self.user_dev, self.user_pm, self.user_sales):
             self._ok_move(task, u, self.stage_free)
 

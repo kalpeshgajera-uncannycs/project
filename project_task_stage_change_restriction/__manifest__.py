@@ -4,7 +4,7 @@
 {
     "name": "Project Task Stage Change Restriction",
     "summary": "Restrict project task stage",
-    "version": "18.0.1.0.0",
+    "version": "19.0.1.0.0",
     "category": "Project",
     "author": "Odoo Community Association (OCA), Cetmix",
     "license": "AGPL-3",

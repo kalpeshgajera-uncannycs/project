@@ -1,7 +1,7 @@
 # Copyright (C) 2025 Cetmix OÜ
 # License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl).
 
-from odoo import _, api, models
+from odoo import api, models
 from odoo.exceptions import UserError
 
 
@@ -47,11 +47,12 @@ class ProjectTask(models.Model):
         for task in self:
             if not self._is_move_allowed(task, new_stage, self.env.user):
                 raise UserError(
-                    _(
+                    self.env._(
                         "Sorry, you are not allowed to move the task "
-                        "'%(task)s' into the stage '%(stage)s'."
+                        "'%(task)s' into the stage '%(stage)s'.",
+                        task=task.display_name,
+                        stage=new_stage.display_name,
                     )
-                    % {"task": task.display_name, "stage": new_stage.display_name}
                 )
         return True
 

@@ -34,4 +34,4 @@ class ProjectTaskType(models.Model):
         self.ensure_one()
         if not self.allow_group_ids:
             return False
-        return bool(self.allow_group_ids & user.groups_id)
+        return bool(self.allow_group_ids & user.group_ids)
