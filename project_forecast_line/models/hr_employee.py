@@ -47,7 +47,6 @@ class HrEmployee(models.Model):
         return super().write(values)
 
     @api.model_create_multi
-    @api.returns("self", lambda value: value.id)
     def create(self, values):
         values = [self._check_job_role(val) for val in values]
         return super().create(values)
@@ -151,8 +150,10 @@ class HrEmployeeForecastRole(models.Model):
                 ]
             )
             forecast_vals += forecast_lines._update_forecast_lines(
-                name="Employee %s as %s (%d%%)"
-                % (rec.employee_id.name, rec.role_id.name, rec.rate),
+                name=(
+                    f"Employee {rec.employee_id.name} "
+                    f"as {rec.role_id.name} ({rec.rate}%)"
+                ),
                 date_from=date_start,
                 date_to=date_end,
                 forecast_hours=forecast * rec.rate / 100.0,
@@ -172,7 +173,7 @@ class HrEmployeeForecastRole(models.Model):
         if force_company_id:
             companies = self.env["res.company"].browse(force_company_id)
         else:
-            companies = self.env["res.company"].search([])
+            companies = self.env["res.company"].search([("id", "!=", False)])
         for company in companies:
             to_update = self.with_company(company).search(
                 [

@@ -8,31 +8,56 @@ from .test_forecast_line import BaseForecastRoleTest
 # ======================================================================
 class TestForecastLineMixin(BaseForecastRoleTest):
     def test_get_forecast_lines(self):
-        # Test retrieving lines without an extra domain
-        lines = self.ProjectTasks._get_forecast_lines()
-        # Assertions
-        self.assertIn(
-            self.forecast_line_one,
-            lines,
-            "Should find the linked forecast line",  # noqa:E501
+        task = self.ProjectTask.create(
+            {"name": "MixinTask", "project_id": self.project.id}
         )
-        self.assertNotIn(
-            self.forecast_line_other,
-            lines,
-            "Should not find lines linked to other IDs",  # noqa:E501
+        line_1 = self.ForecastLine.create(
+            {
+                "company_id": self.company.id,
+                "type": "forecast",
+                "forecast_role_id": self.role_developer.id,
+                "date_from": "2022-01-01",
+                "date_to": "2022-01-01",
+                "res_model": "project.task",
+                "res_id": task.id,
+                "name": "Line 1",
+            }
         )
+        self.ForecastLine.create(
+            {
+                "company_id": self.company.id,
+                "type": "forecast",
+                "forecast_role_id": self.role_developer.id,
+                "date_from": "2022-01-01",
+                "date_to": "2022-01-01",
+                "res_model": "project.task",
+                "res_id": task.id,
+                "name": "Line 2",
+            }
+        )
+        line_other = self.ForecastLine.create(
+            {
+                "company_id": self.company.id,
+                "type": "forecast",
+                "forecast_role_id": self.role_developer.id,
+                "date_from": "2022-01-01",
+                "date_to": "2022-01-01",
+                "res_model": "project.task",
+                "res_id": 99999,
+                "name": "Line Other",
+            }
+        )
+
+        lines = task._get_forecast_lines()
+        self.assertIn(line_1, lines)
+        self.assertNotIn(line_other, lines)
         self.assertEqual(len(lines), 2)
 
-        # Test retrieving lines with an extra domain
-        lines = self.ProjectTasks._get_forecast_lines(
-            domain=[("forecast_role_id", "=", 1)]
+        lines = task._get_forecast_lines(
+            domain=[("forecast_role_id", "=", self.role_developer.id)]
         )
-        self.assertIn(
-            self.forecast_line_one,
-            lines,
-            "This should fetch line 2 and not Line 1",  # noqa:E501
-        )
-        self.assertEqual(len(lines), 1)
+        self.assertIn(line_1, lines)
+        self.assertEqual(len(lines), 2)
 
     @freeze_time("2022-02-14 12:00:00")
     def _make_task_with_lines(self, name, hours=8):

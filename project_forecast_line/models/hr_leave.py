@@ -2,7 +2,7 @@
 # License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl).
 import logging
 
-from odoo import _, api, fields, models
+from odoo import api, fields, models
 
 _logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ class HrLeave(models.Model):
                 forecast_type = "forecast"
             ForecastLine = ForecastLine.with_company(leave.employee_company_id)
             forecast_vals += ForecastLine._prepare_forecast_lines(
-                name=_("Leave"),
+                name=self.env._("Leave"),
                 date_from=leave.date_from.date(),
                 date_to=leave.date_to.date(),
                 ttype=forecast_type,
@@ -71,7 +71,7 @@ class HrLeave(models.Model):
         if force_company_id:
             companies = self.env["res.company"].browse(force_company_id)
         else:
-            companies = self.env["res.company"].search([])
+            companies = self.env["res.company"].search([("id", "!=", False)])
         for company in companies:
             to_update = self.with_company(company).search(
                 [

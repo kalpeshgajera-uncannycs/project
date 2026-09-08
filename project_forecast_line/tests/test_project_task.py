@@ -622,8 +622,7 @@ class TestProjectTask(BaseForecastRoleTest):
             }
         )
 
-        partner = self.env.ref("base.res_partner_1")
-        sale_order = self.env["sale.order"].create({"partner_id": partner.id})
+        sale_order = self.env["sale.order"].create({"partner_id": self.customer.id})
         sale_line = self.env["sale.order.line"].create(
             {
                 "order_id": sale_order.id,
@@ -649,14 +648,16 @@ class TestProjectTask(BaseForecastRoleTest):
         # After task creation, the SO might be auto-confirmed by Odoo depending on default settings. #noqa : E501
         # So we force the SO to reach the expected state using standard actions.
         if so_state == "sale":
+            if sale_order.state == "sale":
+                sale_order.with_context(disable_cancel_warning=True).action_cancel()
+                sale_order.action_draft()
             if sale_order.state != "sale":
                 sale_order.action_confirm()
         elif so_state == "cancel":
-            if sale_order.state != "cancel":
-                if sale_order.state == "draft":
-                    sale_order.action_cancel()
-                else:
-                    sale_order.with_context(disable_cancel_warning=True).action_cancel()
+            if sale_order.state != "draft":
+                sale_order.with_context(disable_cancel_warning=True).action_cancel()
+                sale_order.action_draft()
+            sale_order.action_cancel()
         elif so_state == "draft":
             if sale_order.state != "draft":
                 sale_order.with_context(disable_cancel_warning=True).action_cancel()
@@ -727,7 +728,7 @@ class TestProjectTask(BaseForecastRoleTest):
         forecast_type = task_3.set_forecast_type()
         self.assertIsNone(
             forecast_type,
-            "set_forecast_type must return None when sale_line_id " "is in draft state",
+            "set_forecast_type must return None when sale_line_id is in draft state",
         )
 
         # Condition 4: No stage and no sale line → "forecast" (else branch)
@@ -748,3 +749,14 @@ class TestProjectTask(BaseForecastRoleTest):
             "set_forecast_type must return 'forecast' when neither "
             "stage_id nor sale_line_id is set",
         )
+
+    def test_update_forecast_lines_continue_on_no_forecast_type(self):
+        from unittest.mock import patch
+
+        task = self._make_qualifying_task("NoForecastTypeTask")
+        target_path = (
+            "odoo.addons.project_forecast_line.models.project_task"
+            ".ProjectTask.set_forecast_type"
+        )
+        with patch(target_path, return_value=False):
+            task._update_forecast_lines()

@@ -239,7 +239,7 @@ class ProjectTask(models.Model):
         if force_company_id:
             companies = self.env["res.company"].browse(force_company_id)
         else:
-            companies = self.env["res.company"].search([])
+            companies = self.env["res.company"].search([("id", "!=", False)])
         for company in companies:
             to_update = self.with_company(company).search(
                 [

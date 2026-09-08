@@ -34,7 +34,7 @@ class BaseForecastRoleTest(TransactionCase):
         cls.role_developer = cls.ForecastRole.create({"name": "developer"})
         cls.role_consultant = cls.ForecastRole.create({"name": "consultant"})
         cls.role_pm = cls.ForecastRole.create({"name": "project manager"})
-        cls.company = cls.env["res.company"].search([("id", "=", "1")])
+        cls.company = cls.env.company
         cls.employee_dev = cls.HrEmployee.create({"name": "John Dev"})
         cls.user_consultant = cls.ResUsers.create(
             {"name": "John Consultant", "login": "jc@example.com"}
@@ -82,7 +82,6 @@ class BaseForecastRoleTest(TransactionCase):
                 "standard_price": 75,
                 "forecast_role_id": cls.role_developer.id,
                 "uom_id": cls.env.ref("uom.product_uom_hour").id,
-                "uom_po_id": cls.env.ref("uom.product_uom_hour").id,
             }
         )
         cls.product_consultant_tm = cls.ProductProduct.create(
@@ -94,10 +93,8 @@ class BaseForecastRoleTest(TransactionCase):
                 "standard_price": 80,
                 "forecast_role_id": cls.role_consultant.id,
                 "uom_id": cls.env.ref("uom.product_uom_hour").id,
-                "uom_po_id": cls.env.ref("uom.product_uom_hour").id,
             }
         )
-
         cls.product_pm_tm = cls.ProductProduct.create(
             {
                 "name": "pm time and material",
@@ -107,7 +104,6 @@ class BaseForecastRoleTest(TransactionCase):
                 "standard_price": 100,
                 "forecast_role_id": cls.role_pm.id,
                 "uom_id": cls.env.ref("uom.product_uom_hour").id,
-                "uom_po_id": cls.env.ref("uom.product_uom_hour").id,
             }
         )
         cls.customer = cls.ResPartner.create({"name": "Some Customer"})
@@ -127,9 +123,9 @@ class BaseForecastRoleTest(TransactionCase):
         )
         cls.forecast_line_one = cls.ForecastLine.create(
             {
-                "company_id": 1,
+                "company_id": cls.company.id,
                 "type": "forecast",
-                "forecast_role_id": 1,
+                "forecast_role_id": cls.role_developer.id,
                 "date_from": date.today(),
                 "date_to": date.today() + relativedelta(day=1),
                 "consolidated_forecast": 10.0,
@@ -142,9 +138,9 @@ class BaseForecastRoleTest(TransactionCase):
         )
         cls.forecast_line_two = cls.ForecastLine.create(
             {
-                "company_id": 1,
+                "company_id": cls.company.id,
                 "type": "forecast",
-                "forecast_role_id": 2,
+                "forecast_role_id": cls.role_developer.id,
                 "date_from": date.today(),
                 "date_to": date.today() + relativedelta(day=1),
                 "consolidated_forecast": 20.0,
@@ -156,9 +152,9 @@ class BaseForecastRoleTest(TransactionCase):
         )
         cls.forecast_line_other = cls.ForecastLine.create(
             {
-                "company_id": 1,
+                "company_id": cls.company.id,
                 "type": "forecast",
-                "forecast_role_id": 3,
+                "forecast_role_id": cls.role_developer.id,
                 "date_from": date.today(),
                 "date_to": date.today() + relativedelta(day=1),
                 "consolidated_forecast": 10.0,
@@ -569,7 +565,7 @@ class TestForecastRoleTimesheet(BaseForecastRoleTest):
                     line.product_uom_qty = (
                         45 * 2
                     )  # 45 working days in the period, sell 2 FTE
-                    line.product_uom = self.env.ref("uom.product_uom_day")
+                    line.product_uom_id = self.env.ref("uom.product_uom_day")
             so = form.save()
             so.action_confirm()
 
@@ -906,7 +902,7 @@ class TestForecastRoleProject(BaseForecastRoleTest):
         self.test_task_forecast_lines_consolidated_forecast()
         with Form(self.env["hr.leave"]) as form:
             form.employee_id = self.employee_consultant
-            form.holiday_status_id = self.env.ref("hr_holidays.holiday_status_unpaid")
+            form.holiday_status_id = self.env.ref("hr_holidays.leave_type_unpaid")
             form.request_date_from = "2022-02-14"
             form.request_date_to = "2022-02-15"
         leave_request = form.save()
@@ -914,7 +910,7 @@ class TestForecastRoleProject(BaseForecastRoleTest):
         # the employee capactities (actually delete the existing ones and
         # create new ones -> we check that the project task lines are
         # automatically related to the new newly created employee role lines.
-        leave_request.action_validate()
+        leave_request.action_approve()
         self.env.flush_all()
         self.env.invalidate_all()
         forecast_lines = self.ForecastLine.search(
@@ -1194,7 +1190,6 @@ class TestForecastRoleProject(BaseForecastRoleTest):
 
 
 @tagged("-at_install", "post_install")
-@freeze_time("2022-01-01")
 class TestForecastRoleCoverage(BaseForecastRoleTest):
     def test_write_redundant(self):
         employee = self.employee_dev
@@ -1291,6 +1286,7 @@ class TestForecastRoleCoverage(BaseForecastRoleTest):
         self.assertEqual(task_line_unconfirmed.consolidated_forecast, -1.0)
         self.assertEqual(task_line_unconfirmed.confirmed_consolidated_forecast, 0.0)
 
+    @freeze_time("2022-01-01")
     def test_prepare_forecast_lines_no_employee(self):
         """Lines 307-308: _prepare_forecast_lines without employee"""
         vals = self.ForecastLine._prepare_forecast_lines(
@@ -1342,6 +1338,7 @@ class TestForecastRoleCoverage(BaseForecastRoleTest):
         )
         self.assertEqual(len(vals), 0)
 
+    @freeze_time("2022-01-01")
     def test_cron_recompute_all_options(self):
         """Lines 404, 415: Cron recompute with options"""
         self.ForecastLine._cron_recompute_all(
@@ -1349,6 +1346,7 @@ class TestForecastRoleCoverage(BaseForecastRoleTest):
         )
         self.ForecastLine._cron_recompute_all()
 
+    @freeze_time("2022-01-01")
     def test_forecast_hours(self):
         ProjectTasks_2 = self.ProjectTask.create(
             {
@@ -1356,6 +1354,22 @@ class TestForecastRoleCoverage(BaseForecastRoleTest):
                 "project_id": self.project.id,
             }
         )
+        # test_cron_recompute_all_options (alphabetically prior) calls force_delete=True
+        # which wipes all forecast lines; recreate forecast_line_one if needed.
+        if not self.forecast_line_one.exists():
+            self.forecast_line_one = self.ForecastLine.create(
+                {
+                    "company_id": self.company.id,
+                    "type": "forecast",
+                    "forecast_role_id": self.role_developer.id,
+                    "date_from": date(2022, 1, 1),
+                    "date_to": date(2022, 1, 1),
+                    "res_model": self.ProjectTasks._name,
+                    "res_id": self.ProjectTasks.id,
+                    "task_id": self.ProjectTasks.id,
+                    "name": "Line 1",
+                }
+            )
         self.ProjectTasks.write({"allocated_hours": 8.0})
         self.forecast_line_one._compute_forecast_hours()
         self.env.flush_all()
@@ -1374,8 +1388,5 @@ class TestForecastRoleCoverage(BaseForecastRoleTest):
         )
         count = self.ForecastLine.search_count([("task_id", "=", ProjectTasks_2.id)])
         self.assertEqual(count, 1, "Should be one as we have only created one record")
-        try:
-            self.forecast_line_other._compute_forecast_hours()
-        except ZeroDivisionError:
-            self.env.flush_all()
-            self.assertEqual(self.forecast_line_one.forecast_hours, 0.0)
+        self.forecast_line_other._compute_forecast_hours()
+        self.assertEqual(self.forecast_line_other.forecast_hours, 0.0)

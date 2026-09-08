@@ -168,17 +168,20 @@ class ForecastLine(models.Model):
 
     def _get_grouped_line_values(self):
         data = {}
-        grouped_line_result = self.env["forecast.line"].read_group(
+        grouped_line_result = self.env["forecast.line"]._read_group(
             [("employee_resource_forecast_line_id", "in", self.ids)],
-            fields=["forecast_hours"],
             groupby=["employee_resource_forecast_line_id", "type"],
-            lazy=False,
+            aggregates=["forecast_hours:sum"],
         )
-        for d in grouped_line_result:
-            line_id = d["employee_resource_forecast_line_id"][0]
+        for (
+            employee_resource_forecast_line,
+            type_,
+            forecast_hours_sum,
+        ) in grouped_line_result:
+            line_id = employee_resource_forecast_line.id
             if line_id not in data:
                 data[line_id] = {"confirmed": 0, "forecast": 0}
-            data[line_id][d["type"]] += d["forecast_hours"]
+            data[line_id][type_] += forecast_hours_sum
         return data
 
     @api.model
@@ -199,7 +202,7 @@ class ForecastLine(models.Model):
     @api.depends("task_id.allocated_hours")
     def _compute_forecast_hours(self):
         for line in self:
-            if line.task_id and line.task_id.allocated_hours:
+            if line.task_id and line.task_id.exists() and line.task_id.allocated_hours:
                 # Logic: Divide total hours by number of forecast lines for this task
                 count = self.search_count([("task_id", "=", line.task_id.id)])
                 line.forecast_hours = -(line.task_id.allocated_hours / (count or 1))
@@ -415,7 +418,7 @@ class ForecastLine(models.Model):
         if force_company_id:
             companies = self.env["res.company"].browse(force_company_id)
         else:
-            companies = self.env["res.company"].search([])
+            companies = self.env["res.company"].search([("id", "!=", False)])
         for company in companies:
             ForecastLine = ForecastLine.with_company(company)
             limit_date = date_utils.start_of(today, company.forecast_line_granularity)
@@ -450,7 +453,7 @@ class ForecastLine(models.Model):
         )
         # fix weird issue where the employee_resource_forecast_line_id seems to
         # not be always computed
-        ForecastLine.search([])._compute_employee_forecast_line_id()
+        ForecastLine.search([("id", "!=", False)])._compute_employee_forecast_line_id()
 
     @api.model
     def convert_days_to_hours(self, days):
@@ -484,7 +487,6 @@ class ForecastLine(models.Model):
             return super().unlink()
 
     @api.model_create_multi
-    @api.returns("self", lambda value: value.id)
     def create(self, vals_list):
         records = super().create(vals_list)
         employee_role_lines = records.filtered(
