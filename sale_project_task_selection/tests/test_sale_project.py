@@ -181,6 +181,7 @@ class TestSaleProject(TransactionCase):
         Quotation project, but there's no Project set on the Sale Order and no other
         line that creates one.
         """
+        self.assertFalse(self.order.has_project_service_tracking_lines)
         line = self.env["sale.order.line"].create(
             {
                 "product_id": self.product_create_task.id,
@@ -188,6 +189,7 @@ class TestSaleProject(TransactionCase):
                 "order_id": self.order.id,
             }
         )
+        self.assertTrue(self.order.has_project_service_tracking_lines)
         # In fully standard Odoo, this will cause an error because the Sale Order
         # doesn't have any Project set.
         with (
@@ -455,34 +457,7 @@ class TestSaleProject(TransactionCase):
         ):
             self.order.action_confirm()
 
-    # Disabled for now as it's giving incompatibility error
-    def __test_product_create_task_manually_set_already_linked_order(self):
-        """The manually set Task is already linked to another order"""
-        # Set up another order with a task linked to it
-        another_order = self.order.copy()
-        another_order.project_id = self.project_a
-        self.project_a.sale_order_id = another_order
-        another_task = self.env["project.task"].create(
-            {
-                "name": "Test Task",
-                "allow_billable": True,
-                "project_id": self.project_a.id,
-                "sale_order_id": another_order.id,
-            }
-        )
-        # Now try to set this same task on a new line
-        self.env["sale.order.line"].create(
-            {
-                "order_id": self.order.id,
-                "product_id": self.product_create_task.id,
-                "product_uom_qty": 1,
-                "task_id": another_task.id,
-            }
-        )
-        with self.assertRaisesRegex(
-            UserError, "The task .+ is already linked to another order"
-        ):
-            self.order.action_confirm()
+    # Removed legacy disabled test in favor of the active one at the end of the file
 
     def test_product_create_task_and_project_with_project_already_set(self):
         """Create a Task and a Project, but we set the project manually
@@ -675,3 +650,33 @@ class TestSaleProject(TransactionCase):
             self.project_a,
             "The line with create task with task already set manually has the project",
         )
+
+    def test_product_create_task_manually_set_already_linked_order(self):
+        """The manually set Task is already linked to another order"""
+        another_order = self.env["sale.order"].create({"partner_id": self.partner.id})
+        self.task_a_1.sale_order_id = another_order
+        self.env["sale.order.line"].create(
+            {
+                "order_id": self.order.id,
+                "product_id": self.product_create_task.id,
+                "product_uom_qty": 1,
+                "task_id": self.task_a_1.id,
+            }
+        )
+        with self.assertRaisesRegex(UserError, "already linked to another order"):
+            self.order.action_confirm()
+
+    def test_bind_task_sets_sale_order_id_when_missing(self):
+        """Binding a task updates missing sale_order_id on the task"""
+        line = self.env["sale.order.line"].create(
+            {
+                "order_id": self.order.id,
+                "product_id": self.product_create_task.id,
+                "product_uom_qty": 1,
+                "task_id": self.task_b_1.id,
+            }
+        )
+        self.task_b_1.sale_line_id = line
+        self.task_b_1.sale_order_id = False
+        line._timesheet_service_bind_manually_set_task()
+        self.assertEqual(self.task_b_1.sale_order_id, self.order)
